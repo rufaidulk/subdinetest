@@ -120,7 +120,9 @@ class OrderController extends ApiBaseController
                 'product_id' => $attributes['product_id'],
                 'quantity' => $attributes['quantity'],
                 'price' => $price,
-                'line_total' => $price * $attributes['quantity']
+                'line_total' => $price * $attributes['quantity'],
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
             ];
         }
 
@@ -129,6 +131,7 @@ class OrderController extends ApiBaseController
 
     private function assertStockShortage(Request $request, $products)
     {
+        $shortProducts = [];
         foreach ($request->all() as $attributes)
         {
             $product = $products->where('id', $attributes['product_id'])->first();
@@ -137,6 +140,9 @@ class OrderController extends ApiBaseController
             }
         }
 
+        if (empty($shortProducts)) {
+            return;
+        }
         StockShortEmailJob::dispatch($shortProducts);
     }
 }
