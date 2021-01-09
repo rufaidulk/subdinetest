@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use App\Http\Resources\OrderResource;
+use App\Jobs\StockShortEmailJob;
 use Illuminate\Support\Facades\Validator;
 
 class OrderController extends ApiBaseController
@@ -39,12 +40,13 @@ class OrderController extends ApiBaseController
         if ($validator->fails()) {
             return $this->error($validator->errors()->first(), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
+        $products = Product::whereIn('id', array_column($request->all(), 'product_id'))->get();
+        $this->assertStockShortage($request, $products);
 
         DB::beginTransaction();
+        
         try
-        {
-            $products = Product::whereIn('id', array_column($request->all(), 'product_id'))->get();
-            
+        {   
             $order = $this->createOrder($request, $products);
             $this->createOrderProducts($request, $order, $products);
             
@@ -123,5 +125,18 @@ class OrderController extends ApiBaseController
         }
 
         DB::table('order_products')->insert($data);
+    }
+
+    private function assertStockShortage(Request $request, $products)
+    {
+        foreach ($request->all() as $attributes)
+        {
+            $product = $products->where('id', $attributes['product_id'])->first();
+            if ($product->alert_quantity && ($product->quantity - $attributes['quantity']) <= $product->alert_quantity) {
+                $shortProducts[] = $product->id;
+            }
+        }
+
+        StockShortEmailJob::dispatch($shortProducts);
     }
 }
